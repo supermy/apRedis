@@ -1,29 +1,34 @@
-2016-08-25
-    启动实例
-    $ docker run  -d -p 6379  supermy/ap-redis
-    持久化配置
-    $ docker run --name some-redis -d redis redis-server --appendonly yes
-    链接到应用
-    $ docker run --name some-app --link some-redis:redis -d application-that-uses-redis
-    应用到redis-cli
-    $ docker run -it --link some-redis:redis --rm redis redis-cli -h redis -p 6379
-    自定义配置文件启动
-    $ docker run -v /myredis/conf/redis.conf:/usr/local/etc/redis/redis.conf 
-        --name myredis redis redis-server /usr/local/etc/redis/redis.conf
+#Redis-Cluster-Docker
+
+##介绍
+
+Docker 作为强劲的计算引擎与内存存储
+
+业务场景1：快速构建本地 redis-cluster 6节点的原生集群；
+
+业务场景2：docker redis 镜像。
 
 
+## 一键启动 local redis  集群；
+
+    cd cluster-conf
     
-2016-06-23
-    8M  迷你
-    docker pull redis:alpine   
-    docker run --name some-redis -d redis:alpine
+     启动： sh start.sh 
     
-    #启动持久化存储，制定存储到本地绑定目录 -v /docker/host/dir:/data
-    docker run --name some-redis -d redis redis-server --appendonly yes
+     初始化集群： ./redis-trib.rb create --replicas 0 192.168.0.122:6381 192.168.0.122:6382 192.168.0.122:6383  192.168.0.122:6384  192.168.0.122:6385  192.168.0.122:6386 
+     
+     测试集群： redis-cli -h 192.168.0.122 -c -p 6381 
+     
+     常用集群指令： cluster nodes; cluster info;
+     
+     检测建群状态： ./redis-trib.rb check   127.0.0.1:6381 
+        
     
-    connect to it from an application
-    $ docker run --name some-app --link some-redis:redis -d application-that-uses-redis
-    ... or via redis-cli
-    $ docker run -it --link some-redis:redis --rm redis redis-cli -h redis -p 6379
-   
+## 一键启动 redis4docker 集群；
+
+    fig up -d && fig logs 
     
+
+## 构建本地镜像
+
+    docker build -t supermy/ap-redis redis
