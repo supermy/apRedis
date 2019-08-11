@@ -1,43 +1,19 @@
-FROM supermy/alpine
+FROM redis:alpine
 
-# add our user and group first to make sure their IDs get assigned consistently, regardless of whatever dependencies get added
-RUN addgroup -S redis && adduser -S -G redis redis
 
-# grab su-exec for easy step-down from root
-RUN apk add --no-cache 'su-exec>=0.2'
+MAINTAINER JamesMo <springclick@gmail.com>
 
-#http://download.redis.io/releases/redis-3.2.6.tar.gz
+ENV LANG       zh_CN.UTF-8
+ENV LANGUAGE   zh_CN:zh
 
-ENV REDIS_VERSION 3.2.6
-ENV REDIS_DOWNLOAD_URL http://download.redis.io/releases/redis-3.2.6.tar.gz
-ENV REDIS_DOWNLOAD_SHA1 92d6d93ef2efc91e595c8bf578bf72baff397507
+# 每个 RUN 增加一层，减少层数可以减少镜像包大小
 
-# for redis-sentinel see: http://redis.io/topics/sentinel
-RUN set -x \
-	&& apk add --no-cache --virtual .build-deps \
-		gcc \
-		linux-headers \
-		make \
-		musl-dev \
-		tar \
-	&& wget -O redis.tar.gz "$REDIS_DOWNLOAD_URL" \
-	#&& echo "$REDIS_DOWNLOAD_SHA1 *redis.tar.gz" | sha1sum -c - \
-	&& mkdir -p /usr/src/redis \
-	&& tar -xzf redis.tar.gz -C /usr/src/redis --strip-components=1 \
-	&& rm redis.tar.gz \
-	&& make -C /usr/src/redis \
-	&& make -C /usr/src/redis install \
-	&& rm -r /usr/src/redis \
-	&& apk del .build-deps
+#更新Alpine的软件源为国内（阿里云）的站点，因为从默认官源拉取实在太慢了。。。
+RUN echo "https://mirrors.aliyun.com/alpine/v3.10/main/" > /etc/apk/repositories \
+    && echo "https://mirrors.aliyun.com/alpine/v3.10/community/" >> /etc/apk/repositories \
 
-RUN mkdir /data && chown redis:redis /data
-VOLUME /data
-WORKDIR /data
 
-COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod a+x /usr/local/bin/docker-entrypoint.sh
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+#设置时区
+RUN echo "Asia/Shanghai" > /etc/timezone
 
-EXPOSE 6379
-CMD [ "redis-server" ]
-#CMD [ "redis-server", "/usr/local/etc/redis/redis.conf" ]
+ADD localtime /etc/localtime

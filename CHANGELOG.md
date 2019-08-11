@@ -1,15 +1,19 @@
-2017-07-26
-    
-项目迁移    
 
-2017-07-14
+### 2019-08-11 
+    升级 alpine3.0
+
+### 2017-07-26
+    
+    项目迁移    
+
+### 2017-07-14
 
     ./redis-trib.rb create --replicas 0 192.168.0.122:6381 192.168.0.122:6382 192.168.0.122:6383  192.168.0.122:6384  192.168.0.122:6385  192.168.0.122:6386 
     redis-cli -h 192.168.0.122 -c -p 6381 
     ./redis-trib.rb check   127.0.0.1:6381 
 
 
-2017-06-29
+### 2017-06-29
 
 集群搭建
 
@@ -33,15 +37,15 @@
     ./redis-trib.rb check   127.0.0.1:6381 
     
     
-2016-12-17
-##docker 集群模式
+###2016-12-17
+####docker 集群模式
 fig up -d 
 ./redis-trib.rb create --replicas 0 192.168.0.122:6381 192.168.0.122:6382 192.168.0.122:6383  192.168.0.122:6384  192.168.0.122:6385  192.168.0.122:6386 
 todo 需要优化docker 通过内部网络的启动方式
 redis-cli -h 192.168.0.122 -c -p 6381 
 
-2016-12-16
-##集群模式
+###2016-12-16
+####集群模式
 redis 集群至少需要6个节点，启动成功。
 手动启动-recis-cluster启动节点
 sh start.sh
@@ -51,8 +55,8 @@ sh start.sh
 redis-cli -h 127.0.0.1 -c -p 6381 
 
 
-2016-09-18
-##主从模式
+###2016-09-18
+####主从模式
 ####docker run --net=host --name=master supermy/ap-redis
 ####docker run --net=host --name=slave -d supermy/ap-redis redis-server --port 6380 --slaveof 127.0.0.1 6379
 *   docker exec -it master redis-cli
@@ -66,7 +70,8 @@ redis-cli -h 127.0.0.1 -c -p 6381
 -   返回数据是123,数据已经同步
 *   exit
 ####docker rm -f master slave
-##集群
+
+###集群
 
 >    cat << EOF > redis1.conf   
  
