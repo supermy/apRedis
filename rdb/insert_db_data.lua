@@ -7,7 +7,7 @@
 
 --[[
      ##维护 perm 数据；:id,name is reqquire
-     --raw 中文格式
+     --raw 中文格式 ;分隔符号 @
         redis-cli --raw --ldb --eval rdb/insert_db_data.lua  table  id name desc res json_abc , perms orgs 组织 组织机构 user/orgs jsonABC
      --测试
      --     数据：hgetall systb_perms/记录总数：hgetall systbs
@@ -17,7 +17,7 @@ redis.log(redis.LOG_DEBUG,'insert db data......')
 
 --------------------------------常用函数-begin -------------------------
 -- 数组值转化为字典
-local function arr2kv(arr)
+local function arrval2kv(arr)
     local kv = {}
     for k, v in pairs(arr) do
         kv[v] = true
@@ -88,7 +88,7 @@ local function rdb2redis(argkv)
     local tables = 'systbs';
     local table = 'systb'..'_'..argkv['table']
     local idval = argkv['id']
-    local recid = 'id'..'-'..idval
+    local recid = 'id'..'@'..idval
 
     -- 单条数据存储
     for k, v in pairs(argkv) do
@@ -103,20 +103,20 @@ local function rdb2redis(argkv)
 
             if(k == 'text' or k == 'desc' or k == 'content' or string.match(k, "^json_") )
             then
-                redis.call('hset', table, idval..'-'..k, cmsgpack.pack(v));
+                redis.call('hset', table, idval..'@'..k, cmsgpack.pack(v));
             else
-                redis.call('hset', table, idval..'-'..k, v);
+                redis.call('hset', table, idval..'@'..k, v);
             end
             --todo 关联数据处理[rfld@table@fld]：暂时不用直接存储列表；获取数据的时候，加载关联数据
         end
     end
 
 --    记录主键及字段数: key = table, pattern = idval-* (-避免前缀相同的字段)
-    local flds = redis.call('hscan',table,0,'match',idval..'-'..'*');
+    local flds = redis.call('hscan',table,0,'match',idval..'@'..'*');
     redis.call('hset', table, recid, #flds[2]/2);
 
     -- 数据表信息保存：数据条数
-    local recCnt = redis.call('hscan',table,0,'match','id-'..'*');
+    local recCnt = redis.call('hscan',table,0,'match','id@'..'*');
     redis.call('hset',tables, table,#recCnt[2]/2);
 
     return msg('数据插入成功',false,argkv);
