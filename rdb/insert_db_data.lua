@@ -8,11 +8,12 @@
 --[[
      ##维护 perm 数据；:id,name is reqquire
      --raw 中文格式
-        redis-cli --raw --ldb --eval rdb/insert_db_data.lua  table   id name desc res json_abc , perms orgs 组织 组织机构 user/orgs jsonABC
+        redis-cli --raw --ldb --eval rdb/insert_db_data.lua  table  id name desc res json_abc , perms orgs 组织 组织机构 user/orgs jsonABC
+     --测试
+     --     数据：hgetall systb_perms/记录总数：hgetall systbs
 --]]
 
 redis.log(redis.LOG_DEBUG,'insert db data......')
-
 
 --------------------------------常用函数-begin -------------------------
 -- 数组值转化为字典
@@ -71,31 +72,30 @@ end
 
 --return status
 
---[[
-一个 hash 一个数据表：有利于数据优化存储，技术支持hscan。 hscan,hset,hmget
-    所有记录集合：id_idval1...id_idvaln;idval1_cnt...idvaln_cnt, --- id 值/字段数
-    一条记录集合：idval_field1key...idval_fieldnkey； ----fieldkey/fieldval
-    压缩数据处理：text content json_ desc 保存时候压缩/获取时解压
-    关联数据处理：rfld@table@fld  关联字段标志/关联表table名称/关联field字段名称 值为fieldval列表
 
-]]--
+
 --rdb2redis 存储数据到 redis
 local function rdb2redis(argkv)
+    --[[
+    一个 hash 一个数据表：有利于数据优化存储，技术支持hscan。 hscan,hset,hmget
+        所有记录集合[sys_table; hscan id*]：id_idval1...id_idvaln;idval1_cnt...idvaln_cnt, --- id 值/字段数
+        一条记录集合[table; hscan idval* ;hmget fields]：idval_field1key...idval_fieldnkey； ----fieldkey/fieldval
+        k压缩数据处理[cmspack.pack cmspack.unpac]：text content json_ desc 保存时候压缩/获取时解压
+        关联数据处理[rfld@table@fld]：关联字段标志/关联表table名称/关联field字段名称 值为fieldval列表
+    ]]--
 
-    --- dbs sys_dbs
-    --- tables sys_table
-    --- records sys_table_idkey
-    --- fiels key
-
-    -- 通用存储，保存所有的 key/value 数据，table-id 为 key ; filed=k ,value =v
-    local tables = 'sys_tbs';
-    local table = 'sys'..'_'..argkv['table']
-    local recid = table..'-'..argkv['id']
+    -- 通用存储，保存所有的 key/value 数据，主键：id-idvale/field-count; filed=k ,value =v
+    local tables = 'systbs';
+    local table = 'systb'..'_'..argkv['table']
+    local idval = argkv['id']
+    local recid = 'id'..'-'..idval
 
     -- 单条数据存储
     for k, v in pairs(argkv) do
-        if( k ~= 'id' or k ~= 'table')
+        if( k ~= 'id' and k ~= 'table')
         then
+            redis.debug(k)
+            redis.debug( k ~= 'table')
             -- 大块文本数据压缩存储cmsgpack
             -- 打包压缩存储，节约空间，
             --local packval = cmsgpack.pack(argkv)
@@ -103,25 +103,21 @@ local function rdb2redis(argkv)
 
             if(k == 'text' or k == 'desc' or k == 'content' or string.match(k, "^json_") )
             then
-                redis.call('hset', recid, k, cmsgpack.pack(v));
+                redis.call('hset', table, idval..'-'..k, cmsgpack.pack(v));
             else
-                redis.call('hset', recid, k, v);
+                redis.call('hset', table, idval..'-'..k, v);
             end
+            --todo 关联数据处理[rfld@table@fld]：暂时不用直接存储列表；获取数据的时候，加载关联数据
         end
     end
 
-    -- 单条记录信息保存：字段数量
-    local fieldCnt = redis.call('hlen',recid);
-    redis.call('hset',table, recid,fieldCnt);
+--    记录主键及字段数: key = table, pattern = idval-* (-避免前缀相同的字段)
+    local flds = redis.call('hscan',table,0,'match',idval..'-'..'*');
+    redis.call('hset', table, recid, #flds[2]/2);
 
-
-    -- 更新表信息：数据条数
-    local searchRec = redis.call('scan',0,'match',table..'*');
-    redis.debug(searchRec)
-    local cnt = #searchRec[2]-1
-
-    redis.call('hset',tables,table,cnt);
-
+    -- 数据表信息保存：数据条数
+    local recCnt = redis.call('hscan',table,0,'match','id-'..'*');
+    redis.call('hset',tables, table,#recCnt[2]/2);
 
     return msg('数据插入成功',false,argkv);
 end
@@ -156,14 +152,14 @@ end
 
 
 --------------------------------构建数据并且存储-begin -------------------------
---rdb2redis(argkv)
+return rdb2redis(argkv)
 
-local status = xpcall( rdb2redis(argkv), myerrorhandler )
+--local status = xpcall( rdb2redis(argkv), myerrorhandler )
 
 
 --------------------------------构建数据并且存储-end -------------------------
 
 
-return msg('数据插入成功',false,argkv);
+--return msg('数据插入成功',false,argkv);
 
 
