@@ -5,27 +5,164 @@
 -- Time: 12:30
 -- To change this template use File | Settings | File Templates.
 -- ##维护 perm 数据；
--- redis-cli --ldb --eval lua/get_perm_data.lua  0 , orgs
+-- redis-cli --raw --ldb --eval rdb/get_perm_data.lua  table id , perms orgs
 
-local idvalue = ARGV[1]
+redis.log(redis.LOG_DEBUG,'get db data......')
 
-redis.debug(idvalue)
-
--- set插入perm一条记录
-local result =redis.call('hgetall','sys_perms_data-'..idvalue);
-
-return cjson.encode(result);
-
---[[
-    local id = redis.call('get',key)
-    if(id == false)
-    then
-        redis.call('set',key,1)
-        local key1=redis.call('get',key)
-        redis.debug(key1)
-        return key.."0001"
-    else
-        redis.call('set',key,id+1)
-        return key..string.format('%04d',id + 1)
+--------------------------------常用函数-begin -------------------------
+-- 数组值转化为字典
+local function arr2kv(arr)
+    local kv = {}
+    for k, v in pairs(arr) do
+        kv[v] = true
     end
---]]
+    return kv
+end
+
+-- 参数KEYS/ARGV转化为 kv
+local function arr2kv(key,val)
+    local result = {}
+    for i=1, #key,1 do
+        result[key[i]] = val[i]
+    end
+    return result;
+end
+
+-- 返回数据
+local function msg(msg,err,data)
+
+    local info = {}
+    info.msg = msg;
+    info.data = data;
+
+    local result = {}
+    if(err)
+    then
+        result.err = cjson.encode(info);
+
+    else
+        result.ok = cjson.encode(info);
+    end
+
+    redis.debug(result)
+    redis.log(redis.LOG_DEBUG,result)
+
+    return result;
+end
+
+-- 返回异常信息
+local function myerrorhandler( err )
+
+    --    return msg(err,true,{debug.debug,debug.traceback()})
+    return msg(err,true,debug)
+end
+
+-- 调用扑捉异常
+--local function myfunction ()
+--    n = n/nil
+--end
+
+--local status = xpcall( myfunction, myerrorhandler )
+
+--return status
+--rdb2redis 存储数据到 redis
+
+local function redis2rdb(argkv)
+
+
+    --- dbs sys_dbs
+    --- tables sys_table
+    --- records sys_table_idkey
+    --- fiels key
+
+    -- 通用存储，保存所有的 key/value 数据，table-id 为 key ; filed=k ,value =v
+    local tables = 'sys_tbs';
+    local table = 'sys'..'_'..argkv['table']
+    local recid = table..'-'..argkv['id']
+
+
+    -- 单条数据获取
+    local rec =redis.call('hgetall',recid);
+    local result = {}
+    for i = 1, #rec, 2 do
+        local k = rec[i]
+        local v = rec[i+1]
+--      #数据解压json_支持
+        if(k == 'text' or k == 'desc' or k == 'content' or string.match(k, "^json_"))
+        then
+            v = cmsgpack.unpack(v)
+        end
+        result[k] = v
+
+    end
+--    for k, v in pairs(argkv) do
+--        if( k ~= 'id' or k ~= 'table')
+--        then
+--            -- 大块文本数据压缩存储cmsgpack
+--            -- 打包压缩存储，节约空间，
+--            --local packval = cmsgpack.pack(argkv)
+--            --local packsou = cmsgpack.unpack(packval)
+--
+--            if(k == 'text' or k == 'desc' or k == 'content')
+--            then
+--                redis.call('hset', recid, k, cmsgpack.pack(v));
+--            else
+--                redis.call('hset', recid, k, v);
+--            end
+--        end
+--    end
+
+--    单条记录信息保存：字段数量
+--    local fieldCnt = redis.call('hlen',recid);
+--    redis.call('hset',table, recid,fieldCnt);
+
+
+--    更新表信息：数据条数
+--    local searchRec = redis.call('scan',0,'match',table..'*');
+--    redis.debug(searchRec)
+--    local cnt = #searchRec[2]-1
+--
+--    redis.call('hset',tables,table,cnt);
+
+    return msg('数据获取成功',false,{argkv, rec, result});
+end
+
+
+--------------------------------常用函数-end -------------------------
+
+
+
+--------------------------------参数合规检查-begin -------------------------
+
+
+--参数合规判定处理
+--参数必须：table id;key/value 成对出现。
+if(#KEYS<2 or #ARGV<2 or (#KEYS - #ARGV ~= 0))
+then
+    local errmsg = "参数不匹配：redis-cli --ldb --eval lua/insert_db_data.lua  table id name ... , tablevalue idvalue namevalue ......"
+    return msg(errmsg,true,{KEYS,ARGV})
+end
+
+-- 归属转换
+local argkv = arr2kv(KEYS,ARGV)
+
+if(argkv['id'] == nil or argkv['table'] == nil )
+then
+    local errmsg = "id or table 参数不匹配：redis-cli --ldb --eval lua/insert_db_data.lua  table id name ... , tablevalue idvalue namevalue ......"
+    return msg(errmsg,true,argkv)
+end
+
+--------------------------------参数合规检查-end -------------------------
+
+
+
+--------------------------------构建数据并且存储-begin -------------------------
+return redis2rdb(argkv)
+
+--local status = xpcall( redis2rdb(argkv), myerrorhandler )
+
+
+--------------------------------构建数据并且存储-end -------------------------
+
+
+--return msg('数据获取成功',false,argkv);

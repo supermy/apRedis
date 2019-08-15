@@ -8,7 +8,7 @@
 --[[
      ##维护 perm 数据；:id,name is reqquire
      --raw 中文格式
-        redis-cli --raw --ldb --eval lua/insert_db_data.lua  table   id name desc res , perm orgs 组织 组织机构 user/orgs
+        redis-cli --raw --ldb --eval rdb/insert_db_data.lua  table   id name desc res json_abc , perms orgs 组织 组织机构 user/orgs jsonABC
 --]]
 
 redis.log(redis.LOG_DEBUG,'insert db data......')
@@ -70,8 +70,16 @@ end
 --local status = xpcall( myfunction, myerrorhandler )
 
 --return status
---rdb2redis 存储数据到 redis
 
+--[[
+一个 hash 一个数据表：有利于数据优化存储，技术支持hscan。 hscan,hset,hmget
+    所有记录集合：id_idval1...id_idvaln;idval1_cnt...idvaln_cnt, --- id 值/字段数
+    一条记录集合：idval_field1key...idval_fieldnkey； ----fieldkey/fieldval
+    压缩数据处理：text content json_ desc 保存时候压缩/获取时解压
+    关联数据处理：rfld@table@fld  关联字段标志/关联表table名称/关联field字段名称 值为fieldval列表
+
+]]--
+--rdb2redis 存储数据到 redis
 local function rdb2redis(argkv)
 
     --- dbs sys_dbs
@@ -93,7 +101,7 @@ local function rdb2redis(argkv)
             --local packval = cmsgpack.pack(argkv)
             --local packsou = cmsgpack.unpack(packval)
 
-            if(k == 'text' or k == 'desc' or k == 'content')
+            if(k == 'text' or k == 'desc' or k == 'content' or string.match(k, "^json_") )
             then
                 redis.call('hset', recid, k, cmsgpack.pack(v));
             else
