@@ -5,7 +5,8 @@
 -- Time: 12:30
 -- To change this template use File | Settings | File Templates.
 -- ##维护 perm 数据；
--- redis-cli --raw --ldb --eval rdb/get_perm_data.lua  table id , perms orgs
+-- redis-cli  --raw --ldb --eval rdb/get_db_data.lua  table id , perms orgs
+
 -- 返回数据：
 --    {"data":[{"table":"perms"            },{"orgs":{"name":"组织","table":"systb_perms","id":"orgs","res":"user\/orgs","desc":"组织机构"}}],"msg":"数据获取成功"}
 --    {"data":[{"id":"orgs","table":"perms"},{"orgs":{"name":"组织","table":"systb_perms","id":"orgs","res":"user\/orgs","desc":"组织机构"}}],"msg":"数据获取成功"}
@@ -190,7 +191,7 @@ end
 --参数必须：table id;key/value 成对出现。
 if(#KEYS<1 or #ARGV<1 or (#KEYS - #ARGV ~= 0))
 then
-    local errmsg = "参数不匹配：redis-cli --ldb --eval lua/insert_db_data.lua  table id name ... , tablevalue idvalue namevalue ......"
+    local errmsg = "参数不匹配：redis-cli --ldb --eval rdb/get_db_data.lua  table [ id ] ... , tablevalue [ idvalue ] ......"
     return msg(errmsg,true,{KEYS,ARGV})
 end
 
@@ -200,7 +201,7 @@ local argkv = arr2kv(KEYS,ARGV)
 --if(argkv['id'] == nil or argkv['table'] == nil )
 if( argkv['table'] == nil )
 then
-    local errmsg = "id or table 参数不匹配：redis-cli --ldb --eval lua/insert_db_data.lua  table id name ... , tablevalue idvalue namevalue ......"
+    local errmsg = "id or table 参数不匹配：redis-cli --ldb --eval rdb/get_db_data.lua  table [ id ] ... , tablevalue [ idvalue ] ......"
     return msg(errmsg,true,argkv)
 end
 
