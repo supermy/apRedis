@@ -49,7 +49,7 @@ Docker 作为强劲的计算引擎与内存存储
     持久化存储到本地：
         docker run -it --rm --name some-redis \
                 -d -p 6379:6379 \
-                -v /tmp/data:/data \
+                -v /Users/moyong/project/env-myopensource/3-tools/docker/alpines/redis/data:/data \
                 supermy/ap-redis redis-server --appendonly yes
                 
             
