@@ -1,4 +1,21 @@
+### 2019-09-07 
+    pcall and xpcall 在 redis 中无效；
+    
+    redis script 持久化与调用；redis 重启之后依然有效。
+        redis-cli --raw script load "$(cat rdb/insert_db_data.lua)"
+            :> f9f05a7068b9cb5eecbf2a9fa2cca52f8dc14d7b
+            :>
+            redis-cli --raw evalsha f9f05a7068b9cb5eecbf2a9fa2cca52f8dc14d7b   6 table  id name desc res json_abc  perms orgs 组织 组织机构 user/orgs jsonABC
+        
+            redis-cli --raw evalsha f9f05a7068b9cb5eecbf2a9fa2cca52f8dc14d7b 1 json \
+            {\"table\":\"perms\"\,\"id\":\"orgs\"\,\"name\":\"组织\"\,\"desc\":\"组织机构\"\,\"res\":\"user/orgs\"\,\"json_abc\":\"jsonABC\"}
 
+    
+### 2019-09-06 
+    启用 redis5 aof+rdb 和混合存储模式；
+    测试 redis5 新数据类型 stream；
+    insert_db_data 支持 json 格式；
+    
 ### 2019-08-11 
     升级 alpine3.0
 
