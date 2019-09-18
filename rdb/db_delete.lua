@@ -4,18 +4,46 @@
 -- Date: 2019/8/13
 -- Time: 12:30
 -- To change this template use File | Settings | File Templates.
+
+--[[
+     --raw 中文格式 ;  --ldb 单步调试; 分隔符号 @
+
+     ##维护 perm 数据；只允许单条记录删除
+     -- 参数params 格式:table id is require
+     -- 单条数据
+        :> redis-cli  --raw --eval rdb/db_delete.lua  table id , perms orgs
+     -- 参数 json 格式; 参数不能有空格与逗号,必须双引号 todo urlencode urldecode
+        :> redis-cli --raw --eval rdb/db_delete.lua  json , {\"table\":\"perms\"\,\"id\":\"orgs\"}
+
+     -- 固化插入脚本到 redis
+        :> redis-cli --raw script load "$(cat rdb/db_delete.lua)"
+        :>>> fac208a01e0374c71d9bdd429cd554bd55a36b93
+        redis-cli --raw hset dbscript get fac208a01e0374c71d9bdd429cd554bd55a36b93
+        redis-cli --raw hget dbscript get
+        :>>>
+
+     -- 测试插入脚本 for redis
+        :>redis-cli --raw evalsha fac208a01e0374c71d9bdd429cd554bd55a36b93 2 table id perms orgs
+        :>redis-cli --raw evalsha fac208a01e0374c71d9bdd429cd554bd55a36b93 1 json {\"table\":\"perms\"\,\"id\":\"orgs\"}
+
+     --测试
+     --     数据：
+     --       redis-cli  --raw  hgetall systb_perms
+     --     记录总数：
+     --       redis-cli  --raw  hgetall systbs
+--]]
+
 -- ##维护 perm 数据；
--- redis-cli  --raw --ldb --eval rdb/get_db_data.lua  table id , perms orgs
 
 -- 返回数据：
 --    {"data":[{"table":"perms"            },{"orgs":{"name":"组织","table":"systb_perms","id":"orgs","res":"user\/orgs","desc":"组织机构"}}],"msg":"数据获取成功"}
 --    {"data":[{"id":"orgs","table":"perms"},{"orgs":{"name":"组织","table":"systb_perms","id":"orgs","res":"user\/orgs","desc":"组织机构"}}],"msg":"数据获取成功"}
 
 
-redis.log(redis.LOG_DEBUG,'get db data......')
+redis.log(redis.LOG_DEBUG,'delete db data......')
 
 --------------------------------常用函数-begin -------------------------
--- 数组值转化为字典
+
 local function arrval2kv(arr)
     local kv = {}
     for k, v in pairs(arr) do
@@ -44,7 +72,6 @@ end
 
 
 
-
 -- 返回数据
 local function msg(msg,err,data)
 
@@ -55,9 +82,11 @@ local function msg(msg,err,data)
     local result = {}
     if(err)
     then
+        info.status = 400
         result.err = cjson.encode(info);
 
     else
+        info.status = 200
         result.ok = cjson.encode(info);
     end
 
@@ -67,45 +96,37 @@ local function msg(msg,err,data)
     return result;
 end
 
--- 返回异常信息
-local function myerrorhandler( err )
-
-    --    return msg(err,true,{debug.debug,debug.traceback()})
-    return msg(err,true,debug)
-end
-
--- 调用扑捉异常
---local function myfunction ()
---    n = n/nil
---end
-
---local status = xpcall( myfunction, myerrorhandler )
-
---return status
-
 
 --#获取单条记录
 local function redis2rdb4one(table,idval)
-    --        获取单条记录
-    local flds = redis.call('hscan',table,0,'match',idval..'@'..'*')[2];
+    local idkey = 'id@'..idval
 
-    -- 单条数据获取
-    local result = {}
-    result.table = table
-    result.id = idval
-    for i = 1, #flds, 2 do
-        local k = string.sub(flds[i],#idval+2,#flds[i])
---        local k = flds[i]
-        local v = flds[i+1]
-        --      #数据解压json_支持
-        if(k == 'text' or k == 'desc' or k == 'content' or string.match(k, "^json_"))
-        then
-            v = cmsgpack.unpack(v)
+    redis.log(redis.LOG_DEBUG,table,idkey)
+    redis.log(redis.LOG_DEBUG,redis.call('hexists',table,idkey))
+
+    if (redis.call('hexists',table,idkey)==1) then
+        redis.log(redis.LOG_DEBUG,table,idkey,' exists')
+
+        --获取单条记录
+        local flds = redis.call('hscan',table,0,'match',idval..'@'..'*')[2];
+
+        --删除字段值
+        for i = 1, #flds, 2 do
+--            local k = string.sub(flds[i],#idval+2,#flds[i])
+--            if redis.call('hexists',table,flds[i]) then
+                redis.call('hdel',table,flds[i])
+--            end
         end
-        result[k] = v
+
+        --删除主键
+        redis.call('hdel',table,idkey)
+
+        return true
+    else
+        redis.log(redis.LOG_DEBUG,'idkey',idkey,'not exists')
+        return false
     end
 
-    return result;
 end
 
 --[[
@@ -128,55 +149,11 @@ local function redis2rdb(argkv)
 
     local result = {}
     local idval = argkv['id']
-    if (idval) then
 
-         result[idval] = redis2rdb4one(table,idval)
-
-    else
-
-        local ids = redis.call('hscan',table,0,'match','id@'..'*')[2];
-        for i = 1, #ids, 2 do
-            local k = string.sub(ids[i],4,#ids[i]) --字段名称
---            local k = ids[i]
---            local v = ids[i+1] --字段数
-            result[k] = redis2rdb4one(table, k)
-        end
-
-    end
-
-
-
-
---    for k, v in pairs(argkv) do
---        if( k ~= 'id' or k ~= 'table')
---        then
---            -- 大块文本数据压缩存储cmsgpack
---            -- 打包压缩存储，节约空间，
---            --local packval = cmsgpack.pack(argkv)
---            --local packsou = cmsgpack.unpack(packval)
---
---            if(k == 'text' or k == 'desc' or k == 'content')
---            then
---                redis.call('hset', recid, k, cmsgpack.pack(v));
---            else
---                redis.call('hset', recid, k, v);
---            end
---        end
---    end
-
---    单条记录信息保存：字段数量
---    local fieldCnt = redis.call('hlen',recid);
---    redis.call('hset',table, recid,fieldCnt);
-
-
---    更新表信息：数据条数
---    local searchRec = redis.call('scan',0,'match',table..'*');
---    redis.debug(searchRec)
---    local cnt = #searchRec[2]-1
---
---    redis.call('hset',tables,table,cnt);
-
-    return msg('数据获取成功',false,{argkv,result});
+--    return  redis2rdb4one(table,idval):msg('数据删除成功',false,{argkv}),msg('数据不存在',true,{argkv});
+    --三目运算
+    return (redis2rdb4one(table,idval) and {msg('数据删除成功',false,{argkv})} or {msg('数据不存在',true,{argkv})})[1]
+--    return msg('数据删除成功',false,{argkv});
 end
 
 
@@ -186,22 +163,30 @@ end
 
 --------------------------------参数合规检查-begin -------------------------
 
+-- 参数转换
+local argkv = arr2kv(KEYS,ARGV)
 
---参数合规判定处理
+--if 参数是 json 进行加工
+
+if(argkv['json'] ~= nil)
+then
+    --    redis.debug(argkv['json'])
+    argkv = cjson.decode(argkv['json'])
+end
+
+
+
+--参数合规判定处理 json 参数只有 1 个
 --参数必须：table id;key/value 成对出现。
 if(#KEYS<1 or #ARGV<1 or (#KEYS - #ARGV ~= 0))
 then
-    local errmsg = "参数不匹配：redis-cli --ldb --eval rdb/get_db_data.lua  table [ id ] ... , tablevalue [ idvalue ] ......"
+    local errmsg = "参数不匹配：redis-cli --ldb --eval lua/db_delete.lua  table id , tablevalue idvalue"
     return msg(errmsg,true,{KEYS,ARGV})
 end
 
--- 归属转换
-local argkv = arr2kv(KEYS,ARGV)
-
---if(argkv['id'] == nil or argkv['table'] == nil )
-if( argkv['table'] == nil )
+if(argkv['id'] == nil or argkv['table'] == nil )
 then
-    local errmsg = "id or table 参数不匹配：redis-cli --ldb --eval rdb/get_db_data.lua  table [ id ] ... , tablevalue [ idvalue ] ......"
+    local errmsg = "id or table 参数不匹配：redis-cli --ldb --eval rdb/db_delete.lua  table id , tablevalue idvalue "
     return msg(errmsg,true,argkv)
 end
 
@@ -215,7 +200,6 @@ redis.debug(argkv['id'])
 
 return redis2rdb(argkv)
 
---local status = xpcall( redis2rdb(argkv), myerrorhandler )
 
 
 --------------------------------构建数据并且存储-end -------------------------

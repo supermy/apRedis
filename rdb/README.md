@@ -1,8 +1,10 @@
-#Redis-Lua-RBAC
+#Redis-Lua
 
 ##介绍
 
-应用于小数据并且快速原型的场景。
+1. ALL IN MEMORY;
+2. 端服务,应用于小数据并且快速原型的场景;
+
 使用 lua-redis 实现RBAC权限资源管理系统。
     
 

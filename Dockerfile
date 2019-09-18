@@ -13,7 +13,16 @@ RUN echo "https://mirrors.aliyun.com/alpine/v3.10/main/" > /etc/apk/repositories
     && echo "https://mirrors.aliyun.com/alpine/v3.10/community/" >> /etc/apk/repositories \
 
 
+
 #设置时区
 RUN echo "Asia/Shanghai" > /etc/timezone
+
+#开发环境配置
+ADD redis-dev.conf /usr/local/etc/redis/redis-dev.conf
+#生产环境配置
+ADD redis-pro.conf /usr/local/etc/redis/redis-pro.conf
+
+ADD data/appendonly.aof  /data/appendonly.aof
+ADD data/dump.rdb        /data/dump.rdb
 
 ADD localtime /etc/localtime
