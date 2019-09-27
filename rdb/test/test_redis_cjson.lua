@@ -17,6 +17,6 @@ local jsonstr = cjson.encode(json)
 redis.log(redis.LOG_DEBUG,jsonstr)
 
 local jsonb = cjson.decode(jsonstr)
-redis.log(redis.LOG_DEBUG,jsonb)
+redis.log(redis.LOG_DEBUG,jsonb.a)
 
 redis.log(redis.LOG_DEBUG,'测试 redis 环境下的 json 格式 end')

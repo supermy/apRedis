@@ -12,3 +12,8 @@ local str = string.sub(info,1,2)
 --endIndex 结束时的索引
 
 print(string.sub(info,1,6))
+
+
+local s2 = string.gsub(":abcd",":","",1);
+
+print(s2)

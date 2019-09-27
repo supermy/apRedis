@@ -48,6 +48,37 @@ redis.log(redis.LOG_DEBUG,'get db data......')
 
 --------------------------------常用函数-begin -------------------------
 
+local sfind = string.find
+
+local function find(str, substr)
+    if str == nil or substr == nil then
+        return false
+    end
+    if sfind(str, substr)  then
+        return true
+    else
+        return false
+    end
+end
+
+
+local function DeepCopy( obj )
+    local InTable = {};
+    local function Func(obj)
+        if type(obj) ~= "table" then   --判断表中是否有表
+            return obj;
+        end
+        local NewTable = {};  --定义一个新表
+        InTable[obj] = NewTable;  --若表中有表，则先把表给InTable，再用NewTable去接收内嵌的表
+        for k,v in pairs(obj) do  --把旧表的key和Value赋给新表
+            NewTable[Func(k)] = Func(v);
+        end
+        return setmetatable(NewTable, getmetatable(obj))--赋值元表
+    end
+    return Func(obj) --若表中有表，则把内嵌的表也复制了
+end
+
+
 local function arrval2kv(arr)
     local kv = {}
     for k, v in pairs(arr) do
@@ -74,7 +105,30 @@ local function arrkv2kv(keyval)
     end
 end
 
+local function split(str, delimiter)
+    if str==nil or str=='' or delimiter==nil then
+        return nil
+    end
 
+    local result = {}
+    for match in (str..delimiter):gmatch("(.-)"..delimiter) do
+        table.insert(result, match)
+    end
+    return result
+end
+
+local sfind = string.find
+
+local function start_with(str, substr)
+    if str == nil or substr == nil then
+        return false
+    end
+    if sfind(str, substr) ~= 1 then
+        return false
+    else
+        return true
+    end
+end
 
 -- 返回数据
 local function msg(msg,err,data)
@@ -102,6 +156,9 @@ end
 
 
 --#获取单条记录
+-- table:string
+-- idval:string
+-- fields:table
 local function redis2rdb4one(table,idval)
     --        获取单条记录
     local flds = redis.call('hscan',table,0,'match',idval..'@'..'*')[2];
@@ -113,6 +170,7 @@ local function redis2rdb4one(table,idval)
 
     for i = 1, #flds, 2 do
         local k = string.sub(flds[i],#idval+2,#flds[i])
+
 --        local k = flds[i]
         local v = flds[i+1]
         --      #数据解压json_支持
@@ -120,11 +178,254 @@ local function redis2rdb4one(table,idval)
         then
             v = cmsgpack.unpack(v)
         end
-        result[k] = v
+
+--        -- 提取指定字段
+--        if (fields) then
+--            redis.log(redis.LOG_DEBUG,'提取指定字段',k,fields)
+--
+--            if (fields[k])  then
+--                result[k] = v
+--            end
+--        else --提取所有字段
+
+--            redis.log(redis.LOG_DEBUG,'提取所有字段',k,fields)
+
+            result[k] = v
+--        end
+
     end
 
     return result;
 end
+
+
+--#获取单条记录
+-- table:string
+-- idval:string
+-- fields:table
+--local function redis2rdb4onefields(table,idval,fields)
+--    --        获取单条记录
+----    local flds = redis.call('hscan',table,0,'match',idval..'@'..'*')[2];
+--
+--    -- 单条数据获取
+--    local result = {}
+--    result.table = table
+--    result.id = idval
+--
+--    for i = 1, fields, 2 do
+--        local k = string.sub(flds[i],#idval+2,#flds[i])
+--
+--        --        local k = flds[i]
+--        local v = flds[i+1]
+--        --      #数据解压json_支持
+--        if(k == 'text' or k == 'desc' or k == 'content' or string.match(k, "^json_"))
+--        then
+--            v = cmsgpack.unpack(v)
+--        end
+--
+--        -- 提取指定字段
+--        if (fields) then
+--            redis.log(redis.LOG_DEBUG,'提取指定字段',k,fields)
+--
+--            if (fields[k])  then
+--                result[k] = v
+--            end
+--        else --提取所有字段
+--
+--            redis.log(redis.LOG_DEBUG,'提取所有字段',k,fields)
+--
+--            result[k] = v
+--        end
+--
+--    end
+--
+--    return result;
+--end
+
+
+--    'id|name|:roles>:perms>id,name,res' get引擎-行为递归
+local function Traverse(node, tbl, idval, result)
+    if node == nil or #node == 0 then
+        return
+    end
+
+    print('入口：', cjson.encode(node), tbl, idval)
+
+    local key = table.remove(node,1)
+
+
+    --    for k, v in pairs(node) do
+
+    --        if sfind(key, ":", 2)  then  -- 分解数据
+    if sfind(key, ">")  then  -- 分解数据
+
+        local tblfld = split(key, '>');
+        Traverse(tblfld, tbl, idval, result)
+
+        --此处合并数据 todo 多层数据需递归处理
+
+
+    elseif  start_with(key,":") then  --节点数据处理
+
+--        print('table get',key,' params:' ,tbl ,idval)
+        local fld_vals = redis.call('hget',tbl,idval..'@'..key);
+        redis.log(redis.LOG_DEBUG,'获取数据-关联字段:',key,fld_vals)
+        local tblfldvals = split(fld_vals, ',');
+        redis.log(redis.LOG_DEBUG,'多记录数据:',cjson.encode(tblfldvals))
+
+--        tbl = key
+--        idval = key..'_get_val'
+        tbl = 'systb'..'_'..string.gsub(key,":","",1);
+
+        local n = {}
+        result[key]= n
+
+        for k, v in pairs(tblfldvals) do
+            local obj = {}
+            print('v....',v,cjson.encode(node))
+            Traverse(DeepCopy(node), tbl, v, obj)
+
+            n[v] = obj
+        end
+
+--        if (key ==':roles') then --节点复制
+--            for k, v in pairs({'user','admin'}) do
+--                print('v....',v,cjson.encode(node))
+--                Traverse(DeepCopy(node), tbl, v, obj)
+--
+--                n[v] = obj
+--            end
+--        end
+--
+--        if (key ==':perms') then --节点复制
+--            for k, v in pairs({'db','uri'}) do
+--                print('v....',v,cjson.encode(node))
+--                Traverse(DeepCopy(node), tbl, v, obj)
+--
+--                n[v] = obj
+--            end
+--        end
+
+        node = nil --节点已分拆，清除；fixme 多字段关联
+
+
+    elseif find(key,",") then  --节点字段处理
+        local tblfld = split(key, ',');
+        Traverse(tblfld, tbl, idval, result)
+
+    elseif key =='id' then
+
+--        print('field',key,' params:' ,tbl, idval)
+        redis.log(redis.LOG_DEBUG,'获取数据id:',key,idval)
+        result['id'] = idval
+
+    else
+
+--        print('field get',key,' params:' ,tbl, idval)
+--        result[key] = {tbl..idval}
+
+        local fld_vals = redis.call('hget',tbl,idval..'@'..key);
+        redis.log(redis.LOG_DEBUG,'获取数据:',key,fld_vals)
+        result[key] = fld_vals
+
+    end
+
+    Traverse(node, tbl, idval, result)
+
+end
+--
+----递归解析关联fields,本质上是一棵树：id|name|:roles>:perms>id,name,res'
+--local recu_fields
+--function recu_fields(fld_table,fld_table_id,fields_queue,result)
+--    if #fields_queue == 0 or fields_queue == nil then
+--        return
+--    end
+--
+--    redis.log(redis.LOG_DEBUG,'开始数据:',fld_table,fld_table_id,cjson.encode(fields_queue),cjson.encode(result))
+--
+--
+--    --消费 keys 队列数据，获取 key,获取 val
+--    local fld_key = table.remove(fields_queue,1)
+--    if fld_key=='id' then --特殊字段处理
+--        result['id'] = fld_table_id
+--    else
+--
+--        if start_with(fld_key,":") then  --节点数据处理
+--            redis.log(redis.LOG_DEBUG,'节点数据:',fld_key)
+--
+--            --关联字段队列
+--            local s, e = string.find(fld_key, ":", 2)
+--            if s ~= nil then
+--                local tblfld = split(fld_key, '>');
+--                recu_fields(fld_table,fld_table_id,tblfld,result)
+--            else
+--
+--                local obj = {}
+--
+--                redis.log(redis.LOG_DEBUG,'节点数据1:',fld_key,string.find(fld_key, ","))
+--
+--
+--                result[fld_key] = obj --节点数据
+--
+--                local fld_vals = redis.call('hget',fld_table,fld_table_id..'@'..fld_key);
+--                redis.log(redis.LOG_DEBUG,'获取数据:',fld_key,fld_vals)
+--
+--                --多记录处理
+--                local tblfldvals = split(fld_vals, ',');
+--
+--                redis.log(redis.LOG_DEBUG,'多记录数据:',cjson.encode(tblfldvals))
+--
+--                fld_table = 'systb'..'_'..string.gsub(fld_key,":","",1);
+--                redis.log(redis.LOG_DEBUG,'获取数据表:',fld_table)
+--
+--                for k, v in pairs(tblfldvals) do
+--                    fld_table_id = v
+--                    recu_fields(fld_table,fld_table_id,fields_queue,obj)
+--                end
+--
+--            end
+--
+--
+--
+--
+--        else
+--
+--            redis.log(redis.LOG_DEBUG,'字段:',fld_key)
+--
+--            if string.find(fld_key, ",") then
+--
+--                local tblfld = split(fld_key, ',');
+--                redis.log(redis.LOG_DEBUG,'关联字段:',cjson.encode(tblfld))
+--
+--                local obj = {}
+--
+--                --                fld_table = 'systb'..'_'..string.gsub(fld_key,":","",1);
+--                recu_fields(fld_table,fld_table_id,tblfld,obj)
+--
+--                result[fld_key] = obj --节点数据
+--
+--            else
+--
+--
+--                local fld_vals = redis.call('hget',fld_table,fld_table_id..'@'..fld_key);
+--                redis.log(redis.LOG_DEBUG,'获取数据:',fld_key,fld_vals)
+--                result[fld_key] = fld_vals --叶子数据
+--
+--            end
+--
+--
+--
+--        end
+--
+--    end
+--
+--    --递归完成同级数据处理
+--    recu_fields(fld_table,fld_table_id,fields_queue,result)
+--
+--
+--end
+
+
 
 --[[
 --redis2rdb  从redis获取数据
@@ -146,19 +447,97 @@ local function redis2rdb(argkv)
 
     local result = {}
     local idval = argkv['id']
+    local fields = argkv['fields']
 
 
     if (idval) then
 
         local recid = 'id'..'@'..idval
         if (redis.call('hexists',table,recid)==1) then
-            result[idval] = redis2rdb4one(table,idval)
+            redis.log(redis.LOG_DEBUG,'提取指定记录:',table,recid)
+
+            --            如果制定了数据列以及关联数据列
+--                'id|name|:roles—>:perms->id,name,res'  roles,perms 既是表名也是字段名
+--            redis-cli  --raw --eval rdb/db_get.lua  table id fields , users jamesmo 'id|name|:roles>:perms>id,name,res'
+--              不用解析引擎就得用一堆 for 实现解析
+            if (fields) then
+                redis.log(redis.LOG_DEBUG,'提取指定字段:',fields)
+
+                --获取返回的数据字段名称
+                local fieldlist = split(fields, "|");
+
+                result[idval] =  Traverse(fieldlist,table,idval,result)
+--                Traverse(split(fields,"|"),'users','user', result)
+
+--                for i = 1, #fieldlist do
+
+--                    redis.log(redis.LOG_DEBUG,'提取字段:',fieldlist[i])
+
+--                    recu_fields(table,idval,fieldlist,result)
+
+--                    if start_with(fieldlist[i],":") then
+--                        redis.log(redis.LOG_DEBUG,'提取关联字段:',fieldlist[i])
+--
+--                        local tblfld = split(fieldlist[i], '>');
+--                        redis.log(redis.LOG_DEBUG,'关联字段:',cjson.encode(tblfld))
+--
+--                        local fld_table=table;
+--                        local fld_table_id=idval;
+--
+--                        for j = 1, #tblfld do
+--                            if start_with(tblfld[j],":") then
+--                                redis.log(redis.LOG_DEBUG,'既是关联字段名称，也是关联表名称',tblfld[j-1],tblfld[j])
+--
+--                                --users->roles的值,是 roles 的 idval
+--                                fld_table_id = redis.call('hget',fld_table,fld_table_id..'@'..tblfld[j]);
+--                                redis.log(redis.LOG_DEBUG,'既是关联字段值，也是关联表idval',fld_table_id,tblfld[j])
+--
+--                                --roled->perms的值
+--                                fld_table = 'systb'..'_'..tblfld[j]
+--
+--
+--                            else
+--                                redis.log(redis.LOG_DEBUG,'关联表-关联字段主键值',fld_table,fld_table_id)
+--
+--                                local flds = split(tblfld[j], ',');
+--                                for k = 1, #flds do
+--                                    local fieldval = redis.call('hget',fld_table,fld_table_id..'@'..flds[k]);
+--
+--                                    redis.log(redis.LOG_DEBUG,'关联表-关联字段',fld_table,flds[k],fieldval)
+--
+----                                    result[fieldlist[i]] = fieldval;
+--
+--                                end
+--                            end
+--
+--                        end
+--
+--                    else
+--                        redis.log(redis.LOG_DEBUG,'提取非关联字段',fieldlist[i])
+--
+--                        local fieldval = redis.call('hget',table,idval..'@'..fieldlist[i]);
+--                        result[fieldlist[i]] = fieldval;
+--
+--                    end
+--                end
+
+            else
+
+                redis.log(redis.LOG_DEBUG,'提取所有字段')
+
+                result[idval] = redis2rdb4one(table,idval)
+
+            end
+
+
+
         else
             return msg('数据不存在',true,{argkv});
         end
 
 
     else
+        redis.log(redis.LOG_DEBUG,'提取所有记录',table)
 
         local ids = redis.call('hscan',table,0,'match','id@'..'*')[2];
         for i = 1, #ids, 2 do
